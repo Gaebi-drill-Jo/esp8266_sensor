@@ -3,8 +3,8 @@
 #include <DHT.h>
 
 // WiFi 설정
-const char *ssid = "bssm_free";
-const char *password = "bssm_free";
+const char *ssid = "yourWIFI";
+const char *password = "youtWIFI";
 
 // MQTT 브로커 설정
 const char *mqtt_server = "broker.hivemq.com";

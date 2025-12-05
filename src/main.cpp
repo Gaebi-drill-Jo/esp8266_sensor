@@ -1,7 +1,6 @@
 #include <ESP8266WiFi.h>
 #include <PubSubClient.h>
 #include <DHT.h>
-
 // WiFi 설정
 const char *ssid = "bssm_free";
 const char *password = "bssm_free";
@@ -18,6 +17,14 @@ PubSubClient client(espClient);
 #define DHTPIN 4 // NodeMCU D2 핀(GPIO4)
 #define DHTTYPE DHT11
 DHT dht(DHTPIN, DHTTYPE);
+
+// GP2Y1010AUOF 설정
+#define DUST_LED_PIN D4
+#define DUST_ADC_PIN A0 
+
+const int samplingTime = 280;
+const int deltaTime = 40;
+const int sleepTime = 9680;
 
 void setup()
 {
@@ -38,6 +45,10 @@ void setup()
   // DHT 시작
   dht.begin();
 
+
+
+  pinMode(DUST_LED_PIN, OUTPUT);
+  digitalWrite(DUST_LED_PIN, HIGH);
   // MQTT 초기화
   client.setServer(mqtt_server, mqtt_port);
 }
@@ -73,12 +84,33 @@ void loop()
   // DHT11 데이터 읽기
   float h = dht.readHumidity();
   float t = dht.readTemperature();
+  // --- GP2Y1010AUOF 데이터 읽기 (엄격한 타이밍 적용) ---
+  digitalWrite(DUST_LED_PIN, LOW); // LED 켜기 (적외선 발사)
+  delayMicroseconds(samplingTime); // 280us 대기
+  
+  float dustAdc = analogRead(DUST_ADC_PIN); // 값 읽기
+  
+  delayMicroseconds(deltaTime);    // 40us 대기
+  digitalWrite(DUST_LED_PIN, HIGH); // LED 끄기
+  delayMicroseconds(sleepTime);    // 9680us 대기
+
+  // 미세 먼지 값 읽어오기
+  float vo = dustAdc * (3.3 / 1024.0);
+
+  float voc = 0.6; 
+    float p = (vo - voc) * 200.0;
+
+  if (p < 0)
+  {
+    p = 0.00;
+  }
+
 
   if (!isnan(h) && !isnan(t))
   {
     // MQTT로 퍼블리시
-    char payload[32];
-    snprintf(payload, sizeof(payload), "Temp: %.2f C, Hum: %.2f %%", t, h);
+    char payload[150];
+    snprintf(payload, sizeof(payload),"{\"temperature\":%.2f,\"humidity\": %.2f, \"pm25\" : %.2f}", t, h, p);
 
     client.publish(mqtt_topic, payload);
 
@@ -89,5 +121,6 @@ void loop()
     Serial.println("Failed to read from DHT sensor!");
   }
 
-  delay(5000); // 5초 간격 퍼블리시
+  delay(1000); // 1초 간격 퍼블리시
 }
+ 
